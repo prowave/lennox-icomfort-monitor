@@ -93,7 +93,10 @@ export default function ChartsPage() {
   const [rangeMs, setRangeMs] = useState<number>(RANGE_PRESETS[1].ms);
   const [tempData, setTempData] = useState<ChartPoint[]>([]);
   const [humidityData, setHumidityData] = useState<ChartPoint[]>([]);
-  const [alertPoints, setAlertPoints] = useState<AlertScatterPoint[]>([]);
+  // from/to here are the actual query window used for this load() cycle - shared
+  // by all three charts below so their x-axes all span the full selected period,
+  // not just wherever each chart's own data happens to start/end.
+  const [alertData, setAlertData] = useState<{ points: AlertScatterPoint[]; from: number; to: number } | null>(null);
   const [dailyCost, setDailyCost] = useState<DailyCostEntry[]>([]);
 
   useEffect(() => {
@@ -131,7 +134,7 @@ export default function ChartsPage() {
       fetchSeries(humidityRequests, from, to).then(setHumidityData);
       fetch(`/api/alerts/scatter?from=${from}&to=${to}`)
         .then((r) => r.json())
-        .then((json) => setAlertPoints(json.points ?? []))
+        .then((json) => setAlertData({ points: json.points ?? [], from, to }))
         .catch(() => {});
     },
     [tempRequests, humidityRequests]
@@ -186,21 +189,36 @@ export default function ChartsPage() {
         <h2 className="text-sm uppercase mb-3" style={{ color: "var(--text-muted)" }}>
           Temperature (°F)
         </h2>
-        <LennoxLineChart data={tempData} series={tempSeries} yUnit="°F" domain={["dataMin - 3", "dataMax + 3"]} />
+        <LennoxLineChart
+          data={tempData}
+          series={tempSeries}
+          yUnit="°F"
+          domain={["dataMin - 3", "dataMax + 3"]}
+          xDomain={alertData ? [alertData.from, alertData.to] : undefined}
+        />
       </div>
 
       <div>
         <h2 className="text-sm uppercase mb-3" style={{ color: "var(--text-muted)" }}>
           Humidity (%)
         </h2>
-        <LennoxLineChart data={humidityData} series={humiditySeries} yUnit="%" domain={[0, 100]} />
+        <LennoxLineChart
+          data={humidityData}
+          series={humiditySeries}
+          yUnit="%"
+          domain={[0, 100]}
+          xDomain={alertData ? [alertData.from, alertData.to] : undefined}
+        />
       </div>
 
       <div>
         <h2 className="text-sm uppercase mb-3" style={{ color: "var(--text-muted)" }}>
           Alert Occurrences
         </h2>
-        <AlertScatterChart points={alertPoints} />
+        <AlertScatterChart
+          points={alertData?.points ?? []}
+          domain={alertData ? { from: alertData.from, to: alertData.to } : undefined}
+        />
       </div>
 
       <div>

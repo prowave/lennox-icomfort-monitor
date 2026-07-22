@@ -145,7 +145,12 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {zones.map((zone) => (
-              <ZoneCard key={zone.zone_id} zone={zone} color={colorForZone(zone.zone_id)} />
+              <ZoneCard
+                key={zone.zone_id}
+                zone={zone}
+                color={colorForZone(zone.zone_id)}
+                config={components?.zoneConfig.find((c) => c.zone_id === zone.zone_id)}
+              />
             ))}
           </div>
         )}

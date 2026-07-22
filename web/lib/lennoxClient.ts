@@ -101,6 +101,21 @@ export class LennoxClient {
     return parsed.messages ?? [];
   }
 
+  /** Writes to the device - e.g. a schedule-override setpoint change. Requires connect() first. */
+  async publish(data: Record<string, unknown>): Promise<void> {
+    const body = {
+      MessageType: "Command",
+      SenderID: this.appId,
+      MessageID: crypto.randomUUID(),
+      TargetID: "LCC",
+      Data: data,
+    };
+    const res = await this.request("POST", "/Messages/Publish", 15000, body);
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`Publish failed: HTTP ${res.status} ${res.body}`);
+    }
+  }
+
   async reconnect(jsonPath: string): Promise<boolean> {
     try {
       await this.connect();

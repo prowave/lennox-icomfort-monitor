@@ -8,7 +8,37 @@ function boolLabel(v: number): string {
   return v ? "yes" : "no";
 }
 
-function AlertDetail({ alert }: { alert: AlertDbRow }) {
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return `${m}m ${s}s`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+/**
+ * identity_ts is reliably the alert's start time (it's built from the
+ * originating "set" message), and timestamp_last ends up holding the clear
+ * message's own timestamp after the upsert - so this is a real duration, not
+ * an estimate.
+ */
+function durationLabel(alert: AlertDbRow): string {
+  if (alert.is_still_active) return "—";
+  const start = Number(alert.identity_ts);
+  const end = Number(alert.timestamp_last);
+  if (!alert.identity_ts || !Number.isFinite(start) || !alert.timestamp_last || !Number.isFinite(end)) {
+    return "—";
+  }
+  const seconds = end - start;
+  if (seconds < 0) return "—";
+  return formatDuration(seconds);
+}
+
+function AlertDetail({ alert, columnCount }: { alert: AlertDbRow; columnCount: number }) {
   const [showRaw, setShowRaw] = useState(false);
   let prettyRaw = alert.raw_json ?? "";
   try {
@@ -19,7 +49,7 @@ function AlertDetail({ alert }: { alert: AlertDbRow }) {
 
   return (
     <tr>
-      <td colSpan={6} className="px-3 pb-4" style={{ background: "var(--surface-1)" }}>
+      <td colSpan={columnCount} className="px-3 pb-4" style={{ background: "var(--surface-1)" }}>
         <dl
           className="grid gap-x-4 gap-y-2 text-sm py-3"
           style={{ gridTemplateColumns: "180px 1fr", color: "var(--text-secondary)" }}
@@ -82,8 +112,17 @@ function AlertDetail({ alert }: { alert: AlertDbRow }) {
   );
 }
 
-export function AlertTable({ alerts, emptyLabel }: { alerts: AlertDbRow[]; emptyLabel: string }) {
+export function AlertTable({
+  alerts,
+  emptyLabel,
+  showDuration = false,
+}: {
+  alerts: AlertDbRow[];
+  emptyLabel: string;
+  showDuration?: boolean;
+}) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const columnCount = showDuration ? 7 : 6;
 
   if (!alerts.length) {
     return (
@@ -104,6 +143,7 @@ export function AlertTable({ alerts, emptyLabel }: { alerts: AlertDbRow[]; empty
             <th className="px-3 py-2 font-medium">Code</th>
             <th className="px-3 py-2 font-medium">First seen</th>
             <th className="px-3 py-2 font-medium">Last seen</th>
+            {showDuration && <th className="px-3 py-2 font-medium">Duration</th>}
           </tr>
         </thead>
         <tbody>
@@ -132,8 +172,9 @@ export function AlertTable({ alerts, emptyLabel }: { alerts: AlertDbRow[]; empty
                   <td className="px-3 py-2">{a.code}</td>
                   <td className="px-3 py-2">{fmtTimestamp(a.timestamp_first)}</td>
                   <td className="px-3 py-2">{fmtTimestamp(a.timestamp_last)}</td>
+                  {showDuration && <td className="px-3 py-2">{durationLabel(a)}</td>}
                 </tr>
-                {expanded && <AlertDetail alert={a} />}
+                {expanded && <AlertDetail alert={a} columnCount={columnCount} />}
               </Fragment>
             );
           })}

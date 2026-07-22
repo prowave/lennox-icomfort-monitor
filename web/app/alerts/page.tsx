@@ -62,6 +62,7 @@ export default function AlertsPage() {
         <AlertTable
           alerts={filteredHistory}
           emptyLabel={severityFilter === "all" ? "No cleared alerts yet." : `No ${severityFilter} alerts.`}
+          showDuration
         />
       </div>
     </div>

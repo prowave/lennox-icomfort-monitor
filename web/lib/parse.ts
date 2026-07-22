@@ -13,10 +13,15 @@ export interface ZoneRow {
   tempOperation: string | null;
   humOperation: string | null;
   sp: number | null;
+  spC: number | null;
   hsp: number | null;
+  hspC: number | null;
   csp: number | null;
+  cspC: number | null;
   husp: number | null;
   desp: number | null;
+  humidityMode: string | null;
+  startTime: number | null;
   defrost: boolean | null;
   aux: boolean | null;
   ssr: boolean | null;
@@ -95,6 +100,11 @@ export function parseZones(data: Record<string, any> | undefined, ts: number): Z
   for (const z of zones) {
     const s = z?.status;
     if (!s || typeof z.id !== "number") continue;
+    // The S30 lists placeholder slots for zones the system supports but
+    // doesn't actually have configured (status present but only
+    // temperatureStatus/humidityStatus/doNotPersist, no real reading) -
+    // skip them rather than storing an all-null row for a zone that isn't real.
+    if (s.temperature === undefined && s.period === undefined) continue;
     const p = s.period ?? {};
     rows.push({
       ts,
@@ -109,15 +119,52 @@ export function parseZones(data: Record<string, any> | undefined, ts: number): Z
       tempOperation: s.tempOperation ?? null,
       humOperation: s.humOperation ?? null,
       sp: p.sp ?? null,
+      spC: p.spC ?? null,
       hsp: p.hsp ?? null,
+      hspC: p.hspC ?? null,
       csp: p.csp ?? null,
+      cspC: p.cspC ?? null,
       husp: p.husp ?? null,
       desp: p.desp ?? null,
+      humidityMode: p.humidityMode ?? null,
+      startTime: p.startTime ?? null,
       defrost: s.defrost ?? null,
       aux: s.aux ?? null,
       ssr: s.ssr ?? null,
       ventilation: s.ventilation ?? null,
       fan: s.fan ?? null,
+    });
+  }
+  return rows;
+}
+
+export interface ZoneConfigRow {
+  zoneId: number;
+  minCsp: number | null;
+  maxCsp: number | null;
+  minHsp: number | null;
+  maxHsp: number | null;
+  scheduleId: number | null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseZoneConfigs(data: Record<string, any> | undefined): ZoneConfigRow[] {
+  const zones = data?.zones;
+  if (!Array.isArray(zones)) return [];
+  const rows: ZoneConfigRow[] = [];
+  for (const z of zones) {
+    const c = z?.config;
+    if (!c || typeof z.id !== "number") continue;
+    if (c.minCsp === undefined && c.maxCsp === undefined && c.minHsp === undefined && c.maxHsp === undefined) {
+      continue;
+    }
+    rows.push({
+      zoneId: z.id,
+      minCsp: c.minCsp ?? null,
+      maxCsp: c.maxCsp ?? null,
+      minHsp: c.minHsp ?? null,
+      maxHsp: c.maxHsp ?? null,
+      scheduleId: c.scheduleId ?? null,
     });
   }
   return rows;

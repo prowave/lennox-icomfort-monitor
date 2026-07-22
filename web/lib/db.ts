@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { AlertRow, EquipmentFeatureRow, SystemRow, WeatherRow, ZoneRow } from "./parse";
+import type { AlertRow, EquipmentFeatureRow, SystemRow, WeatherRow, ZoneConfigRow, ZoneRow } from "./parse";
 
 const globalForDb = globalThis as unknown as { lennoxDb?: Database.Database };
 
@@ -30,6 +30,7 @@ function getDb(): Database.Database {
       temp_operation TEXT,
       hum_operation TEXT,
       sp REAL, hsp REAL, csp REAL, husp REAL, desp REAL,
+      sp_c REAL, hsp_c REAL, csp_c REAL, humidity_mode TEXT, start_time INTEGER,
       defrost INTEGER, aux INTEGER, ssr INTEGER, ventilation INTEGER, fan INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_zone_readings_zone_ts ON zone_readings(zone_id, ts);
@@ -92,7 +93,42 @@ function getDb(): Database.Database {
       cloud_coverage REAL,
       rain_probability REAL
     );
+
+    CREATE TABLE IF NOT EXISTS zone_config (
+      zone_id INTEGER PRIMARY KEY,
+      min_csp REAL,
+      max_csp REAL,
+      min_hsp REAL,
+      max_hsp REAL,
+      schedule_id INTEGER,
+      updated_at INTEGER NOT NULL
+    );
   `);
+
+  // Additive migration for pre-existing databases: CREATE TABLE IF NOT EXISTS
+  // above does nothing once the table already exists, so columns added after
+  // the table's first creation need an explicit ALTER TABLE.
+  const zoneReadingColumns = new Set(
+    (db.pragma("table_info(zone_readings)") as { name: string }[]).map((c) => c.name)
+  );
+  for (const [column, ddlType] of [
+    ["sp_c", "REAL"],
+    ["hsp_c", "REAL"],
+    ["csp_c", "REAL"],
+    ["humidity_mode", "TEXT"],
+    ["start_time", "INTEGER"],
+  ] as const) {
+    if (!zoneReadingColumns.has(column)) {
+      db.exec(`ALTER TABLE zone_readings ADD COLUMN ${column} ${ddlType}`);
+    }
+  }
+
+  const zoneConfigColumns = new Set(
+    (db.pragma("table_info(zone_config)") as { name: string }[]).map((c) => c.name)
+  );
+  if (!zoneConfigColumns.has("schedule_id")) {
+    db.exec(`ALTER TABLE zone_config ADD COLUMN schedule_id INTEGER`);
+  }
 
   globalForDb.lennoxDb = db;
   return db;
@@ -129,10 +165,12 @@ export function insertZoneReadings(rows: ZoneRow[]): void {
   insertZoneStmt ??= db.prepare(`
     INSERT INTO zone_readings
       (ts, zone_id, temperature, temperature_c, humidity, damper, demand, system_mode, fan_mode,
-       temp_operation, hum_operation, sp, hsp, csp, husp, desp, defrost, aux, ssr, ventilation, fan)
+       temp_operation, hum_operation, sp, sp_c, hsp, hsp_c, csp, csp_c, husp, desp, humidity_mode,
+       start_time, defrost, aux, ssr, ventilation, fan)
     VALUES
       (@ts, @zoneId, @temperature, @temperatureC, @humidity, @damper, @demand, @systemMode, @fanMode,
-       @tempOperation, @humOperation, @sp, @hsp, @csp, @husp, @desp, @defrost, @aux, @ssr, @ventilation, @fan)
+       @tempOperation, @humOperation, @sp, @spC, @hsp, @hspC, @csp, @cspC, @husp, @desp, @humidityMode,
+       @startTime, @defrost, @aux, @ssr, @ventilation, @fan)
   `);
   const stmt = insertZoneStmt;
   const tx = db.transaction((items: ZoneRow[]) => {
@@ -190,6 +228,37 @@ export function upsertWeather(row: WeatherRow): void {
 
 export function getCurrentWeather() {
   return getDb().prepare(`SELECT * FROM current_weather WHERE id = 1`).get();
+}
+
+let upsertZoneConfigStmt: Database.Statement | null = null;
+export function upsertZoneConfigs(rows: ZoneConfigRow[], updatedAt: number): void {
+  const db = getDb();
+  upsertZoneConfigStmt ??= db.prepare(`
+    INSERT INTO zone_config (zone_id, min_csp, max_csp, min_hsp, max_hsp, schedule_id, updated_at)
+    VALUES (@zoneId, @minCsp, @maxCsp, @minHsp, @maxHsp, @scheduleId, @updatedAt)
+    ON CONFLICT (zone_id) DO UPDATE SET
+      min_csp = excluded.min_csp,
+      max_csp = excluded.max_csp,
+      min_hsp = excluded.min_hsp,
+      max_hsp = excluded.max_hsp,
+      schedule_id = excluded.schedule_id,
+      updated_at = excluded.updated_at
+  `);
+  const stmt = upsertZoneConfigStmt;
+  const tx = db.transaction((items: ZoneConfigRow[]) => {
+    for (const r of items) {
+      stmt.run({ ...r, updatedAt });
+    }
+  });
+  tx(rows);
+}
+
+export function getZoneConfig(zoneId: number) {
+  return getDb().prepare(`SELECT * FROM zone_config WHERE zone_id = ?`).get(zoneId);
+}
+
+export function getAllZoneConfigs() {
+  return getDb().prepare(`SELECT * FROM zone_config ORDER BY zone_id`).all();
 }
 
 let upsertAlertStmt: Database.Statement | null = null;

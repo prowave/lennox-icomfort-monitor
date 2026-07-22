@@ -5,6 +5,7 @@ import { publish } from "./bus";
 import {
   redactMessage,
   parseZones,
+  parseZoneConfigs,
   parseSystem,
   parseAlerts,
   parseEquipmentFeatures,
@@ -16,11 +17,12 @@ import {
   upsertAlerts,
   upsertEquipmentFeatures,
   upsertWeather,
+  upsertZoneConfigs,
   getActiveAlertIdentities,
   closeStaleAlerts,
 } from "./db";
 
-const DEFAULT_JSON_PATH = "1;/systemControl;/alerts/active;/alerts/meta;/equipments;/system";
+const DEFAULT_JSON_PATH = "1;/systemControl;/alerts/active;/alerts/meta;/equipments;/system;/zones";
 
 const LOG_FILE =
   process.env.LENNOX_LOG_FILE ?? path.resolve(process.cwd(), "..", "lennox_log.jsonl");
@@ -83,6 +85,10 @@ function handleMessage(msg: LennoxMessage): void {
     if (rows.length) {
       insertZoneReadings(rows);
       publish({ type: "zones", ts });
+    }
+    const configRows = parseZoneConfigs(data);
+    if (configRows.length) {
+      upsertZoneConfigs(configRows, ts);
     }
   }
   if (data.system) {

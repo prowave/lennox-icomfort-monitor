@@ -32,12 +32,16 @@ export function LennoxLineChart({
   yUnit,
   height = 280,
   domain = ["auto", "auto"],
+  xDomain,
 }: {
   data: ChartPoint[];
   series: ChartSeries[];
   yUnit?: string;
   height?: number;
   domain?: [string | number, string | number];
+  /** The actual query window (e.g. "last 24 hours"), so the axis always spans the
+   * full selected period - not just from whenever the earliest/latest reading happened. */
+  xDomain?: [number, number];
 }) {
   return (
     <div className="card p-4" style={{ height }}>
@@ -45,7 +49,9 @@ export function LennoxLineChart({
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--gridline)" />
           <XAxis
+            type="number"
             dataKey="ts"
+            domain={xDomain ?? ["auto", "auto"]}
             tickFormatter={formatTime}
             stroke="var(--axis)"
             tick={{ fill: "var(--text-muted)", fontSize: 12 }}

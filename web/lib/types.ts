@@ -11,15 +11,30 @@ export interface ZoneReadingRow {
   temp_operation: string | null;
   hum_operation: string | null;
   sp: number | null;
+  sp_c: number | null;
   hsp: number | null;
+  hsp_c: number | null;
   csp: number | null;
+  csp_c: number | null;
   husp: number | null;
   desp: number | null;
+  humidity_mode: string | null;
+  start_time: number | null;
   defrost: number | null;
   aux: number | null;
   ssr: number | null;
   ventilation: number | null;
   fan: number | null;
+}
+
+export interface ZoneConfigDbRow {
+  zone_id: number;
+  min_csp: number | null;
+  max_csp: number | null;
+  min_hsp: number | null;
+  max_hsp: number | null;
+  schedule_id: number | null;
+  updated_at: number;
 }
 
 export interface SystemReadingRow {
@@ -66,6 +81,7 @@ export interface EquipmentFeatureDbRow {
 
 export interface ComponentsResponse {
   zones: ZoneReadingRow[];
+  zoneConfig: ZoneConfigDbRow[];
   system: SystemReadingRow | undefined;
   equipment: EquipmentFeatureDbRow[];
   poller: { lastMessageAt: number | null; connected: boolean };

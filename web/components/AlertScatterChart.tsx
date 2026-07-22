@@ -56,7 +56,17 @@ function TooltipContent({ active, payload }: { active?: boolean; payload?: { pay
   );
 }
 
-export function AlertScatterChart({ points, height = 320 }: { points: AlertScatterPoint[]; height?: number }) {
+export function AlertScatterChart({
+  points,
+  height = 320,
+  domain,
+}: {
+  points: AlertScatterPoint[];
+  height?: number;
+  /** The actual query window (e.g. "last 24 hours"), so the axis always ends at "now" -
+   * not at whenever the most recent alert happened to occur. */
+  domain?: { from: number; to: number };
+}) {
   const bands = buildEquipmentBands(points);
   const bandByType = new Map(bands.map((b) => [b.equipmentType, b]));
   const entries = buildCodeColors(points);
@@ -96,7 +106,7 @@ export function AlertScatterChart({ points, height = 320 }: { points: AlertScatt
           <XAxis
             type="number"
             dataKey="ts"
-            domain={["dataMin", "dataMax"]}
+            domain={domain ? [domain.from, domain.to] : ["dataMin", "dataMax"]}
             tickFormatter={formatTimeLabel}
             stroke="var(--axis)"
             tick={{ fill: "var(--text-muted)", fontSize: 12 }}

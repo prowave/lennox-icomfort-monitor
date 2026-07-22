@@ -1,0 +1,6 @@
+.claude/
+.DS_Store
+__pycache__/
+lennox_log.jsonl
+lennox_log.jsonl.bak.*
+lennox_console.log

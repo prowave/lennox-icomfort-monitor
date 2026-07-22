@@ -11,6 +11,9 @@ import type { AlertScatterPoint, DailyCostEntry, HistoryPoint } from "@/lib/type
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 const RANGE_PRESETS = [
   { label: "Last hour", ms: 60 * 60 * 1000 },
+  { label: "Last 4 hours", ms: 4 * 60 * 60 * 1000 },
+  { label: "Last 8 hours", ms: 8 * 60 * 60 * 1000 },
+  { label: "Last 12 hours", ms: 12 * 60 * 60 * 1000 },
   { label: "Last 24 hours", ms: 24 * 60 * 60 * 1000 },
   { label: "Last 7 days", ms: 7 * 24 * 60 * 60 * 1000 },
 ];
@@ -90,7 +93,7 @@ async function fetchSeries(requests: SeriesRequest[], from: number, to: number):
 export default function ChartsPage() {
   const [zoneIds, setZoneIds] = useState<number[]>([]);
   const [mode, setMode] = useState<"live" | "range">("live");
-  const [rangeMs, setRangeMs] = useState<number>(RANGE_PRESETS[1].ms);
+  const [rangeMs, setRangeMs] = useState<number>(24 * 60 * 60 * 1000);
   const [tempData, setTempData] = useState<ChartPoint[]>([]);
   const [humidityData, setHumidityData] = useState<ChartPoint[]>([]);
   // from/to here are the actual query window used for this load() cycle - shared

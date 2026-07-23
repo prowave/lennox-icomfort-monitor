@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getEquipmentSnapshot, getLatestSystemReading, getLatestZoneSnapshot, getAllZoneConfigs } from "@/lib/db";
+import {
+  getEquipmentSnapshot,
+  getEquipmentDiagnosticsSnapshot,
+  getLatestSystemReading,
+  getLatestZoneSnapshot,
+  getAllZoneConfigs,
+} from "@/lib/db";
 import { getPollerStatus } from "@/lib/poller";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +17,7 @@ export async function GET() {
     zoneConfig: getAllZoneConfigs(),
     system: getLatestSystemReading(),
     equipment: getEquipmentSnapshot(),
+    diagnostics: getEquipmentDiagnosticsSnapshot(),
     poller: getPollerStatus(),
   });
 }

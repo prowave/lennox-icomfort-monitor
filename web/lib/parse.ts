@@ -79,6 +79,13 @@ export interface EquipmentFeatureRow {
   valuesJson: string;
 }
 
+export interface EquipmentDiagnosticRow {
+  equipmentId: number;
+  diagnosticName: string;
+  value: string;
+  unit: string | null;
+}
+
 /** Strips the plaintext WiFi password the S30 broadcasts in its `interfaces` telemetry, in place. */
 export function redactMessage(msg: LennoxMessage): LennoxMessage {
   const interfaces = msg.Data?.interfaces;
@@ -267,6 +274,38 @@ export function parseEquipmentFeatures(data: Record<string, any> | undefined): E
         format: feature.format ?? null,
         unit: feature.unit ?? null,
         valuesJson: JSON.stringify(feature.values ?? []),
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Live compressor/coil/airflow telemetry (Compressor Hz, Coil Temp, Discharge
+ * Air Temperature, Indoor/Outdoor Blower RPM, pressure switch status, etc.) -
+ * a separate array from the static identity `features` above, delivered
+ * through the same /equipments subscription. Pushed rarely (a handful of
+ * times per full log vs. thousands of zone readings), and fields read the
+ * literal string "waiting..." until the outdoor unit has reported a live
+ * value - that's the device's own placeholder, not a parsing gap.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseEquipmentDiagnostics(data: Record<string, any> | undefined): EquipmentDiagnosticRow[] {
+  const equipments = data?.equipments;
+  if (!Array.isArray(equipments)) return [];
+  const rows: EquipmentDiagnosticRow[] = [];
+  for (const eq of equipments) {
+    const equipmentId = eq?.id;
+    const diagnostics = eq?.equipment?.diagnostics;
+    if (typeof equipmentId !== "number" || !Array.isArray(diagnostics)) continue;
+    for (const d of diagnostics) {
+      const diagnostic = d?.diagnostic;
+      if (!diagnostic?.name) continue;
+      rows.push({
+        equipmentId,
+        diagnosticName: diagnostic.name,
+        value: diagnostic.value ?? "",
+        unit: diagnostic.unit || null,
       });
     }
   }

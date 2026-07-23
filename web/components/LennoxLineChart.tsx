@@ -5,11 +5,13 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import type { PowerCycleEvent } from "@/lib/types";
 
 export interface ChartSeries {
   key: string;
@@ -35,6 +37,7 @@ export function LennoxLineChart({
   height = 280,
   domain = ["auto", "auto"],
   xDomain,
+  powerCycles,
 }: {
   data: ChartPoint[];
   series: ChartSeries[];
@@ -44,6 +47,9 @@ export function LennoxLineChart({
   /** The actual query window (e.g. "last 24 hours"), so the axis always spans the
    * full selected period - not just from whenever the earliest/latest reading happened. */
   xDomain?: [number, number];
+  /** Reconnect events - drawn as a vertical dotted marker rather than plotted as data,
+   * since the device briefly reports sentinel values (not real readings) right after one. */
+  powerCycles?: PowerCycleEvent[];
 }) {
   return (
     <div className="card p-4" style={{ height }}>
@@ -91,6 +97,15 @@ export function LennoxLineChart({
             labelStyle={{ color: "var(--text-secondary)" }}
           />
           {series.length > 1 && <Legend wrapperStyle={{ color: "var(--text-secondary)", fontSize: 13 }} />}
+          {powerCycles?.map((event) => (
+            <ReferenceLine
+              key={event.ts}
+              x={event.ts}
+              stroke="var(--text-muted)"
+              strokeDasharray="4 4"
+              label={{ value: "Power cycle", position: "insideTopRight", fill: "var(--text-muted)", fontSize: 11 }}
+            />
+          ))}
           {series.map((s) => (
             <Line
               key={s.key}

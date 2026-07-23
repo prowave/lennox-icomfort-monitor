@@ -11,7 +11,7 @@ import {
   fetchSeries,
   perZoneRequests,
 } from "@/lib/chartData";
-import type { AlertScatterPoint } from "@/lib/types";
+import type { AlertScatterPoint, PowerCycleEvent } from "@/lib/types";
 
 export default function ChartsPage() {
   const [zoneIds, setZoneIds] = useState<number[]>([]);
@@ -23,6 +23,7 @@ export default function ChartsPage() {
   // by all three charts below so their x-axes all span the full selected period,
   // not just wherever each chart's own data happens to start/end.
   const [alertData, setAlertData] = useState<{ points: AlertScatterPoint[]; from: number; to: number } | null>(null);
+  const [powerCycles, setPowerCycles] = useState<PowerCycleEvent[]>([]);
 
   useEffect(() => {
     fetch("/api/components")
@@ -43,6 +44,10 @@ export default function ChartsPage() {
       fetch(`/api/alerts/scatter?from=${from}&to=${to}`)
         .then((r) => r.json())
         .then((json) => setAlertData({ points: json.points ?? [], from, to }))
+        .catch(() => {});
+      fetch(`/api/power-cycles?from=${from}&to=${to}`)
+        .then((r) => r.json())
+        .then((json) => setPowerCycles(json.events ?? []))
         .catch(() => {});
     },
     [tempRequests, humidityRequests]
@@ -103,6 +108,7 @@ export default function ChartsPage() {
           yUnit="°F"
           domain={["dataMin - 3", "dataMax + 3"]}
           xDomain={alertData ? [alertData.from, alertData.to] : undefined}
+          powerCycles={powerCycles}
         />
       </div>
 
@@ -116,6 +122,7 @@ export default function ChartsPage() {
           yUnit="%"
           domain={[0, 100]}
           xDomain={alertData ? [alertData.from, alertData.to] : undefined}
+          powerCycles={powerCycles}
         />
       </div>
 

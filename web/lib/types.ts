@@ -79,11 +79,20 @@ export interface EquipmentFeatureDbRow {
   last_seen_ts: number;
 }
 
+export interface EquipmentDiagnosticDbRow {
+  equipment_id: number;
+  diagnostic_name: string;
+  value: string | null;
+  unit: string | null;
+  last_seen_ts: number;
+}
+
 export interface ComponentsResponse {
   zones: ZoneReadingRow[];
   zoneConfig: ZoneConfigDbRow[];
   system: SystemReadingRow | undefined;
   equipment: EquipmentFeatureDbRow[];
+  diagnostics: EquipmentDiagnosticDbRow[];
   poller: { lastMessageAt: number | null; connected: boolean };
 }
 
@@ -121,6 +130,10 @@ export interface AlertScatterPoint {
   equipmentLabel: string;
   priority: string | null;
   userMessage: string | null;
+}
+
+export interface PowerCycleEvent {
+  ts: number;
 }
 
 export interface WeatherDbRow {

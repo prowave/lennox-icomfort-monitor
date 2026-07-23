@@ -1,7 +1,15 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { AlertRow, EquipmentFeatureRow, SystemRow, WeatherRow, ZoneConfigRow, ZoneRow } from "./parse";
+import type {
+  AlertRow,
+  EquipmentDiagnosticRow,
+  EquipmentFeatureRow,
+  SystemRow,
+  WeatherRow,
+  ZoneConfigRow,
+  ZoneRow,
+} from "./parse";
 
 const globalForDb = globalThis as unknown as { lennoxDb?: Database.Database };
 
@@ -79,6 +87,15 @@ function getDb(): Database.Database {
       values_json TEXT,
       last_seen_ts INTEGER NOT NULL,
       PRIMARY KEY (equipment_id, feature_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS equipment_diagnostics (
+      equipment_id INTEGER NOT NULL,
+      diagnostic_name TEXT NOT NULL,
+      value TEXT,
+      unit TEXT,
+      last_seen_ts INTEGER NOT NULL,
+      PRIMARY KEY (equipment_id, diagnostic_name)
     );
 
     CREATE TABLE IF NOT EXISTS current_weather (
@@ -335,6 +352,26 @@ export function upsertEquipmentFeatures(rows: EquipmentFeatureRow[], lastSeenTs:
   tx(rows);
 }
 
+let upsertDiagnosticStmt: Database.Statement | null = null;
+export function upsertEquipmentDiagnostics(rows: EquipmentDiagnosticRow[], lastSeenTs: number): void {
+  const db = getDb();
+  upsertDiagnosticStmt ??= db.prepare(`
+    INSERT INTO equipment_diagnostics (equipment_id, diagnostic_name, value, unit, last_seen_ts)
+    VALUES (@equipmentId, @diagnosticName, @value, @unit, @lastSeenTs)
+    ON CONFLICT (equipment_id, diagnostic_name) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      last_seen_ts = excluded.last_seen_ts
+  `);
+  const stmt = upsertDiagnosticStmt;
+  const tx = db.transaction((items: EquipmentDiagnosticRow[]) => {
+    for (const r of items) {
+      stmt.run({ ...r, lastSeenTs });
+    }
+  });
+  tx(rows);
+}
+
 function boolToInt(v: boolean | null): number | null {
   if (v === null) return null;
   return v ? 1 : 0;
@@ -431,19 +468,68 @@ export function getEquipmentSnapshot() {
     .all();
 }
 
+export function getEquipmentDiagnosticsSnapshot() {
+  return getDb()
+    .prepare(`SELECT * FROM equipment_diagnostics ORDER BY equipment_id, diagnostic_name`)
+    .all();
+}
+
 const HISTORY_COLUMNS = new Set(["temperature", "temperature_c", "humidity", "damper", "demand"]);
+
+/**
+ * Right after a reconnect ("power cycle"), the S30 briefly reports sensor
+ * fields as a fixed-point sentinel meaning "not yet reporting" - observed as
+ * exactly 2047.9375 for temperature and 127.5 for humidity. These are device
+ * placeholders, not real readings, so they're nulled out here (never sent to
+ * the chart) rather than plotted as a false spike. Bounds are set well below
+ * the exact sentinel so minor firmware variations still get caught.
+ */
+const METRIC_SENTINEL_MAX: Partial<Record<string, number>> = {
+  temperature: 200,
+  temperature_c: 90,
+  humidity: 100,
+};
 
 export function getZoneHistory(zoneId: number, metric: string, fromTs: number, toTs: number) {
   if (!HISTORY_COLUMNS.has(metric)) {
     throw new Error(`Unsupported metric: ${metric}`);
   }
+  const sentinelMax = METRIC_SENTINEL_MAX[metric];
+  const valueExpr = sentinelMax !== undefined ? `CASE WHEN ${metric} > ${sentinelMax} THEN NULL ELSE ${metric} END` : metric;
   return getDb()
     .prepare(
-      `SELECT ts, ${metric} AS value FROM zone_readings
+      `SELECT ts, ${valueExpr} AS value FROM zone_readings
        WHERE zone_id = ? AND ts BETWEEN ? AND ?
        ORDER BY ts`
     )
     .all(zoneId, fromTs, toTs);
+}
+
+/**
+ * Distinct power-cycle/reconnect events in range, one per cluster of
+ * sentinel readings (a single reconnect produces several sentinel rows in
+ * quick succession as different fields update - collapsed here into one
+ * marker per real event using the first timestamp in each cluster).
+ */
+const POWER_CYCLE_CLUSTER_GAP_MS = 5 * 60 * 1000;
+
+export function getPowerCycleEvents(fromTs: number, toTs: number): { ts: number }[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT ts FROM zone_readings
+       WHERE ts BETWEEN ? AND ? AND (temperature > ? OR humidity > ?)
+       ORDER BY ts`
+    )
+    .all(fromTs, toTs, METRIC_SENTINEL_MAX.temperature, METRIC_SENTINEL_MAX.humidity) as { ts: number }[];
+
+  const events: { ts: number }[] = [];
+  for (const row of rows) {
+    const last = events[events.length - 1];
+    if (!last || row.ts - last.ts > POWER_CYCLE_CLUSTER_GAP_MS) {
+      events.push({ ts: row.ts });
+    }
+  }
+  return events;
 }
 
 /** Maps temp_operation to a 0/1 signal (1 = actively cooling), for a digital on/off chart. */
@@ -461,7 +547,8 @@ export function getZoneCoolingHistory(zoneId: number, fromTs: number, toTs: numb
 export function getOutdoorTemperatureHistory(fromTs: number, toTs: number) {
   return getDb()
     .prepare(
-      `SELECT ts, outdoor_temperature AS value FROM system_readings
+      `SELECT ts, CASE WHEN outdoor_temperature > ${METRIC_SENTINEL_MAX.temperature} THEN NULL ELSE outdoor_temperature END AS value
+       FROM system_readings
        WHERE ts BETWEEN ? AND ?
        ORDER BY ts`
     )

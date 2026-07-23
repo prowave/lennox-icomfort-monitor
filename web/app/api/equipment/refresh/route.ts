@@ -1,0 +1,13 @@
+import { NextResponse } from "next/server";
+import { requestDiagnosticsRefresh } from "@/lib/poller";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export async function POST() {
+  const result = await requestDiagnosticsRefresh();
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 502 });
+  }
+  return NextResponse.json({ ok: true });
+}

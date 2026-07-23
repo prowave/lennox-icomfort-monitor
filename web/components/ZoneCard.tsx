@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ZoneConfigDbRow, ZoneReadingRow } from "@/lib/types";
 import { zoneOperationDisplay } from "@/lib/zoneOperationIcons";
+import { titleCase } from "@/lib/formatLabel";
 
 function fmt(value: number | null, suffix = ""): string {
   return value === null || value === undefined ? "—" : `${value}${suffix}`;
@@ -102,11 +103,9 @@ export function ZoneCard({
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: "var(--text-secondary)" }}>
         <dt>Mode</dt>
-        <dd>{zone.system_mode ?? "—"}</dd>
+        <dd>{titleCase(zone.system_mode)}</dd>
         <dt>Fan</dt>
-        <dd>{zone.fan_mode ?? "—"}</dd>
-        <dt>Setpoint</dt>
-        <dd>{fmt(zone.sp, "°F")}</dd>
+        <dd>{titleCase(zone.fan_mode)}</dd>
         <dt>Heat / Cool SP</dt>
         <dd>
           {!editing ? (

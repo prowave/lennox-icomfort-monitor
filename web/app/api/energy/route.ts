@@ -20,13 +20,17 @@ export async function GET() {
   const days = allDays.slice(-DAYS_TO_RETURN).map((d) => ({
     date: d.date,
     coolingMinutes: d.coolingMinutes,
-    estimatedCost: estimateCost(d.coolingMinutes, wattsRunning, ratePerKwh),
+    effortMinutes: d.effortMinutes,
+    avgDemandPct: d.avgDemandPct,
+    estimatedCost: estimateCost(d.effortMinutes, wattsRunning, ratePerKwh),
   }));
 
   const todayKey = localDateKey(Date.now());
   const today = days.find((d) => d.date === todayKey) ?? {
     date: todayKey,
     coolingMinutes: 0,
+    effortMinutes: 0,
+    avgDemandPct: 0,
     estimatedCost: 0,
   };
 

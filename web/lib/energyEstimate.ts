@@ -11,6 +11,10 @@ const GAP_CAP_MS = 30 * 60 * 1000;
 export interface DailyCooling {
   date: string; // YYYY-MM-DD, local calendar day
   coolingMinutes: number;
+  /** Cooling runtime weighted by each segment's actual demand (capacity) % - the "effective full-power minutes". */
+  effortMinutes: number;
+  /** Average demand % while cooling, for display - not used in the cost formula itself. */
+  avgDemandPct: number;
 }
 
 function localDateKey(ts: number): string {
@@ -30,7 +34,7 @@ function localDateKey(ts: number): string {
 export function computeDailyCoolingMinutes(zoneId: number): DailyCooling[] {
   const rows = getZoneOperationTimeline(zoneId);
   const now = Date.now();
-  const byDate = new Map<string, number>();
+  const byDate = new Map<string, { coolingMs: number; effortMs: number }>();
 
   for (let i = 0; i < rows.length; i++) {
     const current = rows[i];
@@ -39,15 +43,28 @@ export function computeDailyCoolingMinutes(zoneId: number): DailyCooling[] {
     const rawEnd = next ? next.ts : now;
     const durationMs = Math.min(rawEnd - current.ts, GAP_CAP_MS);
     if (durationMs <= 0) continue;
+    // Readings from before demand was tracked (or a missed report) default to
+    // 100% - i.e. the old flat-wattage assumption - rather than silently
+    // zeroing out their cost.
+    const weight = (current.demand ?? 100) / 100;
     const key = localDateKey(current.ts);
-    byDate.set(key, (byDate.get(key) ?? 0) + durationMs);
+    const entry = byDate.get(key) ?? { coolingMs: 0, effortMs: 0 };
+    entry.coolingMs += durationMs;
+    entry.effortMs += durationMs * weight;
+    byDate.set(key, entry);
   }
 
   return [...byDate.entries()]
-    .map(([date, ms]) => ({ date, coolingMinutes: ms / 60_000 }))
+    .map(([date, { coolingMs, effortMs }]) => ({
+      date,
+      coolingMinutes: coolingMs / 60_000,
+      effortMinutes: effortMs / 60_000,
+      avgDemandPct: coolingMs > 0 ? (effortMs / coolingMs) * 100 : 0,
+    }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function estimateCost(coolingMinutes: number, wattsRunning: number, ratePerKwh: number): number {
-  return (coolingMinutes / 60) * (wattsRunning / 1000) * ratePerKwh;
+/** wattsRunning is the assumed FULL-CAPACITY wattage; effortMinutes already bakes in average demand. */
+export function estimateCost(effortMinutes: number, wattsRunning: number, ratePerKwh: number): number {
+  return (effortMinutes / 60) * (wattsRunning / 1000) * ratePerKwh;
 }

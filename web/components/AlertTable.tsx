@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import type { AlertDbRow } from "@/lib/types";
 import { priorityColor, fmtTimestamp, equipmentLabel, messageLabel } from "@/lib/alertLabels";
+import { titleCase } from "@/lib/formatLabel";
 
 function boolLabel(v: number): string {
   return v ? "yes" : "no";
@@ -67,10 +68,10 @@ function AlertDetail({ alert, columnCount }: { alert: AlertDbRow; columnCount: n
           <dd>{fmtTimestamp(alert.timestamp_clear)}</dd>
 
           <dt style={{ color: "var(--text-muted)" }}>Action</dt>
-          <dd>{alert.action ?? "—"}</dd>
+          <dd>{titleCase(alert.action)}</dd>
 
           <dt style={{ color: "var(--text-muted)" }}>Cleared by</dt>
-          <dd>{alert.cleared_by ?? "—"}</dd>
+          <dd>{titleCase(alert.cleared_by)}</dd>
 
           <dt style={{ color: "var(--text-muted)" }}>Update flag</dt>
           <dd>{boolLabel(alert.update_flag)}</dd>
@@ -164,7 +165,7 @@ export function AlertTable({
                         className="inline-block h-2 w-2 rounded-full"
                         style={{ background: priorityColor(a.priority) }}
                       />
-                      {a.priority ?? "unknown"}
+                      {a.priority ? titleCase(a.priority) : "Unknown"}
                     </span>
                   </td>
                   <td className="px-3 py-2">{messageLabel(a)}</td>

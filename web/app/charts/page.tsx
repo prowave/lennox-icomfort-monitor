@@ -4,91 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLennoxEvent } from "@/lib/useLennoxStream";
 import { LennoxLineChart, type ChartPoint, type ChartSeries } from "@/components/LennoxLineChart";
 import { AlertScatterChart } from "@/components/AlertScatterChart";
-import { DailyCostBarChart } from "@/components/DailyCostBarChart";
-import { colorForZone, OUTDOOR_COLOR } from "@/lib/palette";
-import type { AlertScatterPoint, DailyCostEntry, HistoryPoint } from "@/lib/types";
-
-const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
-const RANGE_PRESETS = [
-  { label: "Last hour", ms: 60 * 60 * 1000 },
-  { label: "Last 4 hours", ms: 4 * 60 * 60 * 1000 },
-  { label: "Last 8 hours", ms: 8 * 60 * 60 * 1000 },
-  { label: "Last 12 hours", ms: 12 * 60 * 60 * 1000 },
-  { label: "Last 24 hours", ms: 24 * 60 * 60 * 1000 },
-  { label: "Last 7 days", ms: 7 * 24 * 60 * 60 * 1000 },
-];
-
-interface SeriesRequest {
-  key: string;
-  label: string;
-  color: string;
-  zoneId?: number;
-  metric: string;
-}
-
-function buildSeriesRequests(zoneIds: number[]): { temperature: SeriesRequest[]; humidity: SeriesRequest[] } {
-  const temperature: SeriesRequest[] = [
-    { key: "outdoor", label: "Outdoor", color: OUTDOOR_COLOR, metric: "outdoor_temperature" },
-    ...zoneIds.map((id) => ({
-      key: `zone-${id}`,
-      label: `Zone ${id}`,
-      color: colorForZone(id),
-      zoneId: id,
-      metric: "temperature",
-    })),
-  ];
-  const humidity: SeriesRequest[] = zoneIds.map((id) => ({
-    key: `zone-${id}`,
-    label: `Zone ${id}`,
-    color: colorForZone(id),
-    zoneId: id,
-    metric: "humidity",
-  }));
-  return { temperature, humidity };
-}
-
-async function fetchSeries(requests: SeriesRequest[], from: number, to: number): Promise<ChartPoint[]> {
-  const results = await Promise.all(
-    requests.map(async (r) => {
-      const params = new URLSearchParams({ metric: r.metric, from: String(from), to: String(to) });
-      if (r.zoneId !== undefined) params.set("zoneId", String(r.zoneId));
-      const res = await fetch(`/api/history?${params.toString()}`);
-      const json: { points?: HistoryPoint[] } = await res.json();
-      return { key: r.key, points: json.points ?? [] };
-    })
-  );
-
-  const byTs = new Map<number, ChartPoint>();
-  for (const { key, points } of results) {
-    for (const p of points) {
-      if (p.value === null) continue;
-      const existing = byTs.get(p.ts) ?? { ts: p.ts };
-      existing[key] = p.value;
-      byTs.set(p.ts, existing);
-    }
-  }
-  const sorted = Array.from(byTs.values()).sort((a, b) => a.ts - b.ts);
-
-  // Outdoor and indoor readings arrive at different timestamps, so a merged
-  // point usually only has ONE series defined - Recharts' default tooltip
-  // only lists series present in the exact hovered point, so without this
-  // hovering would show just whichever series happened to update at that
-  // instant. Carry forward each series' last known value across the merged
-  // timeline so every point (once a series has reported at least once) shows
-  // all series together.
-  const lastKnown: Record<string, number> = {};
-  for (const point of sorted) {
-    for (const r of requests) {
-      if (point[r.key] === undefined) {
-        if (r.key in lastKnown) point[r.key] = lastKnown[r.key];
-      } else {
-        lastKnown[r.key] = point[r.key] as number;
-      }
-    }
-  }
-
-  return sorted;
-}
+import {
+  LIVE_WINDOW_MS,
+  RANGE_PRESETS,
+  buildTemperatureRequests,
+  fetchSeries,
+  perZoneRequests,
+} from "@/lib/chartData";
+import type { AlertScatterPoint } from "@/lib/types";
 
 export default function ChartsPage() {
   const [zoneIds, setZoneIds] = useState<number[]>([]);
@@ -100,7 +23,6 @@ export default function ChartsPage() {
   // by all three charts below so their x-axes all span the full selected period,
   // not just wherever each chart's own data happens to start/end.
   const [alertData, setAlertData] = useState<{ points: AlertScatterPoint[]; from: number; to: number } | null>(null);
-  const [dailyCost, setDailyCost] = useState<DailyCostEntry[]>([]);
 
   useEffect(() => {
     fetch("/api/components")
@@ -109,25 +31,8 @@ export default function ChartsPage() {
       .catch(() => {});
   }, []);
 
-  const refetchDailyCost = useCallback(() => {
-    fetch("/api/energy")
-      .then((r) => r.json())
-      .then((json) => setDailyCost(json.days ?? []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refetchDailyCost();
-  }, [refetchDailyCost]);
-
-  useLennoxEvent((event) => {
-    if (event.type === "zones") refetchDailyCost();
-  });
-
-  const { temperature: tempRequests, humidity: humidityRequests } = useMemo(
-    () => buildSeriesRequests(zoneIds),
-    [zoneIds]
-  );
+  const tempRequests = useMemo(() => buildTemperatureRequests(zoneIds), [zoneIds]);
+  const humidityRequests = useMemo(() => perZoneRequests(zoneIds, "humidity"), [zoneIds]);
 
   const load = useCallback(
     (windowMs: number) => {
@@ -222,16 +127,6 @@ export default function ChartsPage() {
           points={alertData?.points ?? []}
           domain={alertData ? { from: alertData.from, to: alertData.to } : undefined}
         />
-      </div>
-
-      <div>
-        <h2 className="text-sm uppercase mb-1" style={{ color: "var(--text-muted)" }}>
-          Estimated Daily AC Cost
-        </h2>
-        <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-          Estimated from cooling runtime x assumed wattage x your electricity rate - not a metered reading.
-        </p>
-        <DailyCostBarChart days={dailyCost} />
       </div>
     </div>
   );

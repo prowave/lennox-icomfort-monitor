@@ -446,6 +446,18 @@ export function getZoneHistory(zoneId: number, metric: string, fromTs: number, t
     .all(zoneId, fromTs, toTs);
 }
 
+/** Maps temp_operation to a 0/1 signal (1 = actively cooling), for a digital on/off chart. */
+export function getZoneCoolingHistory(zoneId: number, fromTs: number, toTs: number) {
+  return getDb()
+    .prepare(
+      `SELECT ts, CASE WHEN temp_operation = 'cooling' THEN 1 ELSE 0 END AS value
+       FROM zone_readings
+       WHERE zone_id = ? AND ts BETWEEN ? AND ?
+       ORDER BY ts`
+    )
+    .all(zoneId, fromTs, toTs);
+}
+
 export function getOutdoorTemperatureHistory(fromTs: number, toTs: number) {
   return getDb()
     .prepare(
@@ -470,9 +482,11 @@ export function getAlertsForScatter(fromMs: number, toMs: number) {
     .all(fromMs, toMs);
 }
 
-/** Full temp_operation timeline for one zone, oldest first - used to derive runtime for the AC cost estimate. */
-export function getZoneOperationTimeline(zoneId: number): { ts: number; temp_operation: string | null }[] {
+/** Full temp_operation + demand timeline for one zone, oldest first - used to derive runtime and effort for the AC cost estimate. */
+export function getZoneOperationTimeline(
+  zoneId: number
+): { ts: number; temp_operation: string | null; demand: number | null }[] {
   return getDb()
-    .prepare(`SELECT ts, temp_operation FROM zone_readings WHERE zone_id = ? ORDER BY ts`)
-    .all(zoneId) as { ts: number; temp_operation: string | null }[];
+    .prepare(`SELECT ts, temp_operation, demand FROM zone_readings WHERE zone_id = ? ORDER BY ts`)
+    .all(zoneId) as { ts: number; temp_operation: string | null; demand: number | null }[];
 }

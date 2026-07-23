@@ -25,7 +25,7 @@ function TooltipContent({
       <div style={{ color: "var(--text-secondary)" }}>{p.date}</div>
       <div className="font-medium">${p.estimatedCost.toFixed(2)}</div>
       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-        {Math.round(p.coolingMinutes)} min cooling
+        {Math.round(p.coolingMinutes)} min cooling, {Math.round(p.avgDemandPct)}% avg effort
       </div>
     </div>
   );

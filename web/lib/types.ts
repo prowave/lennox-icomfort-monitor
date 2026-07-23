@@ -90,6 +90,8 @@ export interface ComponentsResponse {
 export interface DailyCostEntry {
   date: string;
   coolingMinutes: number;
+  effortMinutes: number;
+  avgDemandPct: number;
   estimatedCost: number;
 }
 

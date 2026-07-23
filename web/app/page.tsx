@@ -6,7 +6,10 @@ import { useLennoxEvent } from "@/lib/useLennoxStream";
 import { colorForZone } from "@/lib/palette";
 import { ZoneCard } from "@/components/ZoneCard";
 import { WeatherWidget } from "@/components/WeatherWidget";
+import { LoadGauge } from "@/components/LoadGauge";
+import { FanCard } from "@/components/FanCard";
 import { equipmentLabel, messageLabel } from "@/lib/alertLabels";
+import { titleCase } from "@/lib/formatLabel";
 import type { AlertsResponse, ComponentsResponse, EnergyResponse } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -58,6 +61,7 @@ export default function DashboardPage() {
   const zones = components?.zones ?? [];
   const outdoor = components?.system;
   const equipmentCount = new Set((components?.equipment ?? []).map((f) => f.equipment_id)).size;
+  const primaryZone = zones[0];
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto">
@@ -109,7 +113,7 @@ export default function DashboardPage() {
             {outdoor?.outdoor_temperature ?? "—"}°F
           </div>
           <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {outdoor?.outdoor_temperature_status ?? "unknown"}
+            {outdoor?.outdoor_temperature_status ? titleCase(outdoor.outdoor_temperature_status) : "Unknown"}
           </div>
         </div>
         <div className="card p-4">
@@ -130,10 +134,12 @@ export default function DashboardPage() {
           <div className="text-3xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
             ${(energy?.today.estimatedCost ?? 0).toFixed(2)}
           </div>
-          <Link href="/charts" className="text-sm underline" style={{ color: "var(--text-secondary)" }}>
+          <Link href="/energy" className="text-sm underline" style={{ color: "var(--text-secondary)" }}>
             View trend
           </Link>
         </div>
+        <LoadGauge value={primaryZone?.demand ?? null} />
+        <FanCard zone={primaryZone} />
       </div>
 
       <div>

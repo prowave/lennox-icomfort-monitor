@@ -21,6 +21,8 @@
   --series-7: #4a3aa7;
   --series-8: #e34948;
 
+  --ice: #0ea5c9;
+
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
@@ -56,6 +58,8 @@
     --series-7: #9085e9;
     --series-8: #e66767;
 
+    --ice: #22d3ee;
+
     --status-good: #0ca30c;
     --status-warning: #fab219;
     --status-serious: #ec835a;
@@ -83,6 +87,8 @@
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
+
+  --ice: #22d3ee;
 }
 
 body {

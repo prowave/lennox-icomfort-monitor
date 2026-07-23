@@ -16,3 +16,6 @@ export function colorForZone(zoneId: number): string {
 }
 
 export const OUTDOOR_COLOR = SERIES_COLORS[0];
+
+/** Cooling is always this ice blue, regardless of zone - it's a system state, not a per-zone identity. */
+export const ICE_COLOR = "var(--ice)";

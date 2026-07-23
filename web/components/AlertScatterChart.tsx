@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import type { AlertScatterPoint } from "@/lib/types";
 import { buildCodeColors, buildEquipmentBands, jitterFor } from "@/lib/alertScatterLayout";
+import { titleCase } from "@/lib/formatLabel";
 
 const JITTER_AMPLITUDE = 0.32;
 
@@ -50,7 +51,7 @@ function TooltipContent({ active, payload }: { active?: boolean; payload?: { pay
       </div>
       {p.userMessage && <div style={{ color: "var(--text-secondary)" }}>{p.userMessage}</div>}
       <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-        priority: {p.priority ?? "unknown"}
+        Priority: {p.priority ? titleCase(p.priority) : "Unknown"}
       </div>
     </div>
   );

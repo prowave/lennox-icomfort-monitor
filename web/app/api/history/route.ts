@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOutdoorTemperatureHistory, getZoneHistory } from "@/lib/db";
+import { getOutdoorTemperatureHistory, getZoneHistory, getZoneCoolingHistory } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +25,9 @@ export async function GET(request: Request) {
     const zoneId = Number(zoneIdParam);
     if (zoneIdParam === null || !Number.isFinite(zoneId)) {
       return NextResponse.json({ error: "zoneId is required for zone metrics" }, { status: 400 });
+    }
+    if (metric === "cooling") {
+      return NextResponse.json({ metric, zoneId, points: getZoneCoolingHistory(zoneId, from, to) });
     }
     return NextResponse.json({
       metric,

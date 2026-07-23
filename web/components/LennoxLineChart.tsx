@@ -15,6 +15,8 @@ export interface ChartSeries {
   key: string;
   label: string;
   color: string;
+  /** Render this line as a value-based gradient (green at 0 -> blue at 50 -> red at 100) instead of a solid stroke. Assumes a 0-100 domain. */
+  gradient?: boolean;
 }
 
 export interface ChartPoint {
@@ -47,6 +49,19 @@ export function LennoxLineChart({
     <div className="card p-4" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+          <defs>
+            {series
+              .filter((s) => s.gradient)
+              .map((s) => (
+                // Vertical gradient over the plot box: top (y1, high value) -> red,
+                // middle -> blue, bottom (y2, low value) -> green.
+                <linearGradient key={s.key} id={`gradient-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--status-critical)" />
+                  <stop offset="50%" stopColor="var(--ice)" />
+                  <stop offset="100%" stopColor="var(--status-good)" />
+                </linearGradient>
+              ))}
+          </defs>
           <CartesianGrid vertical={false} stroke="var(--gridline)" />
           <XAxis
             type="number"
@@ -82,7 +97,7 @@ export function LennoxLineChart({
               type="monotone"
               dataKey={s.key}
               name={s.label}
-              stroke={s.color}
+              stroke={s.gradient ? `url(#gradient-${s.key})` : s.color}
               strokeWidth={2}
               strokeLinecap="round"
               dot={false}

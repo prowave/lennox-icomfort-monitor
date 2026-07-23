@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/alerts", label: "Alerts" },
   { href: "/components", label: "Components" },
   { href: "/charts", label: "Charts" },
+  { href: "/energy", label: "Energy" },
 ];
 
 export function NavBar() {

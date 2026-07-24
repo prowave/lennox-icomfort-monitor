@@ -118,3 +118,41 @@ body {
     animation: none;
   }
 }
+
+.snow-flake {
+  position: absolute;
+  line-height: 1;
+  animation: snow-fall linear infinite;
+}
+
+@keyframes snow-fall {
+  0% {
+    top: -10%;
+    transform: translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  90% {
+    opacity: 0.85;
+  }
+  100% {
+    top: 110%;
+    transform: translateX(8px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snow-flake {
+    animation: none;
+    display: none;
+  }
+}
+
+.heat-shimmer-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(255, 100, 30, 0.28), rgba(255, 100, 30, 0) 70%);
+}

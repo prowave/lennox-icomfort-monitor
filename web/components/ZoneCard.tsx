@@ -1,15 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { ZoneConfigDbRow, ZoneReadingRow } from "@/lib/types";
 import { zoneOperationDisplay } from "@/lib/zoneOperationIcons";
 import { titleCase } from "@/lib/formatLabel";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 function fmt(value: number | null, suffix = ""): string {
   return value === null || value === undefined ? "—" : `${value}${suffix}`;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+
+interface SnowFlake {
+  left: number;
+  size: number;
+  duration: number;
+  delay: number;
+}
+
+const SNOW_FLAKE_COUNT = 14;
+
+function generateSnowFlakes(): SnowFlake[] {
+  return Array.from({ length: SNOW_FLAKE_COUNT }, () => {
+    const duration = 6 + Math.random() * 6;
+    return {
+      left: Math.random() * 100,
+      size: 9 + Math.random() * 8,
+      duration,
+      // Negative delay starts each flake already mid-fall, so they look
+      // scattered immediately on mount instead of all beginning at the top together.
+      delay: -Math.random() * duration,
+    };
+  });
+}
 
 export function ZoneCard({
   zone,
@@ -21,6 +45,11 @@ export function ZoneCard({
   config?: ZoneConfigDbRow;
 }) {
   const operation = zoneOperationDisplay(zone.temp_operation);
+  const isCooling = zone.temp_operation === "cooling";
+  const isHeating = zone.temp_operation === "heating";
+  const snowFlakes = useMemo(() => generateSnowFlakes(), []);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const shimmerId = `heat-shimmer-${useId().replace(/:/g, "")}`;
   const [editing, setEditing] = useState(false);
   const [hspInput, setHspInput] = useState("");
   const [cspInput, setCspInput] = useState("");
@@ -76,7 +105,43 @@ export function ZoneCard({
       : null;
 
   return (
-    <div className="card p-4 flex flex-col gap-2">
+    <div className="card p-4 flex flex-col gap-2 relative overflow-hidden">
+      {isCooling && !prefersReducedMotion && (
+        <div className="absolute inset-0" style={{ zIndex: 0, pointerEvents: "none" }} aria-hidden>
+          {snowFlakes.map((flake, i) => (
+            <span
+              key={i}
+              className="snow-flake"
+              style={{
+                left: `${flake.left}%`,
+                fontSize: flake.size,
+                animationDuration: `${flake.duration}s`,
+                animationDelay: `${flake.delay}s`,
+              }}
+            >
+              ❄️
+            </span>
+          ))}
+        </div>
+      )}
+      {isHeating && !prefersReducedMotion && (
+        <div className="absolute inset-0" style={{ zIndex: 0, pointerEvents: "none" }} aria-hidden>
+          <svg width="0" height="0" style={{ position: "absolute" }}>
+            <filter id={shimmerId}>
+              <feTurbulence type="fractalNoise" numOctaves={2} baseFrequency="0.01 0.06" seed={3} result="turbulence">
+                <animate
+                  attributeName="baseFrequency"
+                  dur="8s"
+                  values="0.01 0.06;0.02 0.10;0.01 0.06"
+                  repeatCount="indefinite"
+                />
+              </feTurbulence>
+              <feDisplacementMap in="SourceGraphic" in2="turbulence" scale={14} xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+          </svg>
+          <div className="heat-shimmer-glow" style={{ filter: `url(#${shimmerId})` }} />
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span className="font-medium" style={{ color: "var(--text-primary)" }}>
           <span

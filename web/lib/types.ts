@@ -79,12 +79,24 @@ export interface EquipmentFeatureDbRow {
   last_seen_ts: number;
 }
 
-export interface EquipmentDiagnosticDbRow {
-  equipment_id: number;
-  diagnostic_name: string;
-  value: string | null;
-  unit: string | null;
-  last_seen_ts: number;
+export interface NetworkInterfaceDbRow {
+  interface_id: number;
+  ts: number;
+  mac_addr: string | null;
+  ssid: string | null;
+  ip: string | null;
+  router: string | null;
+  network_status: string | null;
+  channel: number | null;
+  bit_rate: number | null;
+  rssi: number | null;
+  tx_byte_count: number | null;
+  rx_byte_count: number | null;
+}
+
+export interface OccupancyDbRow {
+  ts: number;
+  manual_away: number | null;
 }
 
 export interface ComponentsResponse {
@@ -92,7 +104,8 @@ export interface ComponentsResponse {
   zoneConfig: ZoneConfigDbRow[];
   system: SystemReadingRow | undefined;
   equipment: EquipmentFeatureDbRow[];
-  diagnostics: EquipmentDiagnosticDbRow[];
+  network: NetworkInterfaceDbRow[];
+  occupancy: OccupancyDbRow | undefined;
   poller: { lastMessageAt: number | null; connected: boolean };
 }
 
@@ -154,4 +167,6 @@ export type ReadingEvent =
   | { type: "alerts"; ts: number }
   | { type: "equipment"; ts: number }
   | { type: "weather"; ts: number }
+  | { type: "network"; ts: number }
+  | { type: "occupancy"; ts: number }
   | { type: "heartbeat"; ts: number; connected: boolean };

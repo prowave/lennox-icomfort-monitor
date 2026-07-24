@@ -8,6 +8,8 @@ import { ZoneCard } from "@/components/ZoneCard";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import { LoadGauge } from "@/components/LoadGauge";
 import { FanCard } from "@/components/FanCard";
+import { NetworkCard } from "@/components/NetworkCard";
+import { AwayModeCard } from "@/components/AwayModeCard";
 import { equipmentLabel, messageLabel } from "@/lib/alertLabels";
 import { titleCase } from "@/lib/formatLabel";
 import type { AlertsResponse, ComponentsResponse, EnergyResponse } from "@/lib/types";
@@ -45,7 +47,13 @@ export default function DashboardPage() {
   }, [refetchComponents, refetchAlerts, refetchEnergy]);
 
   useLennoxEvent((event) => {
-    if (event.type === "zones" || event.type === "system" || event.type === "equipment") {
+    if (
+      event.type === "zones" ||
+      event.type === "system" ||
+      event.type === "equipment" ||
+      event.type === "network" ||
+      event.type === "occupancy"
+    ) {
       refetchComponents();
     }
     if (event.type === "alerts") {
@@ -62,6 +70,8 @@ export default function DashboardPage() {
   const outdoor = components?.system;
   const equipmentCount = new Set((components?.equipment ?? []).map((f) => f.equipment_id)).size;
   const primaryZone = zones[0];
+  const primaryInterface = components?.network[0];
+  const isAway = components?.occupancy?.manual_away === 1;
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto">
@@ -140,6 +150,8 @@ export default function DashboardPage() {
         </div>
         <LoadGauge value={primaryZone?.demand ?? null} />
         <FanCard zone={primaryZone} />
+        <NetworkCard iface={primaryInterface} />
+        <AwayModeCard isAway={isAway} />
       </div>
 
       <div>

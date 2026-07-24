@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   AlertRow,
-  EquipmentDiagnosticRow,
   EquipmentFeatureRow,
+  NetworkInterfaceRow,
+  OccupancyRow,
   SystemRow,
   WeatherRow,
   ZoneConfigRow,
@@ -89,13 +90,25 @@ function getDb(): Database.Database {
       PRIMARY KEY (equipment_id, feature_name)
     );
 
-    CREATE TABLE IF NOT EXISTS equipment_diagnostics (
-      equipment_id INTEGER NOT NULL,
-      diagnostic_name TEXT NOT NULL,
-      value TEXT,
-      unit TEXT,
-      last_seen_ts INTEGER NOT NULL,
-      PRIMARY KEY (equipment_id, diagnostic_name)
+    CREATE TABLE IF NOT EXISTS network_interfaces (
+      interface_id INTEGER PRIMARY KEY,
+      ts INTEGER NOT NULL,
+      mac_addr TEXT,
+      ssid TEXT,
+      ip TEXT,
+      router TEXT,
+      network_status TEXT,
+      channel INTEGER,
+      bit_rate INTEGER,
+      rssi INTEGER,
+      tx_byte_count INTEGER,
+      rx_byte_count INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS current_occupancy (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      ts INTEGER NOT NULL,
+      manual_away INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS current_weather (
@@ -247,6 +260,55 @@ export function getCurrentWeather() {
   return getDb().prepare(`SELECT * FROM current_weather WHERE id = 1`).get();
 }
 
+let upsertNetworkInterfaceStmt: Database.Statement | null = null;
+export function upsertNetworkInterfaces(rows: NetworkInterfaceRow[]): void {
+  const db = getDb();
+  upsertNetworkInterfaceStmt ??= db.prepare(`
+    INSERT INTO network_interfaces
+      (interface_id, ts, mac_addr, ssid, ip, router, network_status, channel, bit_rate, rssi, tx_byte_count, rx_byte_count)
+    VALUES
+      (@interfaceId, @ts, @macAddr, @ssid, @ip, @router, @networkStatus, @channel, @bitRate, @rssi, @txByteCount, @rxByteCount)
+    ON CONFLICT (interface_id) DO UPDATE SET
+      ts = excluded.ts,
+      mac_addr = excluded.mac_addr,
+      ssid = excluded.ssid,
+      ip = excluded.ip,
+      router = excluded.router,
+      network_status = excluded.network_status,
+      channel = excluded.channel,
+      bit_rate = excluded.bit_rate,
+      rssi = excluded.rssi,
+      tx_byte_count = excluded.tx_byte_count,
+      rx_byte_count = excluded.rx_byte_count
+  `);
+  const stmt = upsertNetworkInterfaceStmt;
+  const tx = db.transaction((items: NetworkInterfaceRow[]) => {
+    for (const r of items) stmt.run(r);
+  });
+  tx(rows);
+}
+
+export function getNetworkSnapshot() {
+  return getDb().prepare(`SELECT * FROM network_interfaces ORDER BY interface_id`).all();
+}
+
+let upsertOccupancyStmt: Database.Statement | null = null;
+export function upsertOccupancy(row: OccupancyRow): void {
+  const db = getDb();
+  upsertOccupancyStmt ??= db.prepare(`
+    INSERT INTO current_occupancy (id, ts, manual_away)
+    VALUES (1, @ts, @manualAway)
+    ON CONFLICT (id) DO UPDATE SET
+      ts = excluded.ts,
+      manual_away = excluded.manual_away
+  `);
+  upsertOccupancyStmt.run({ ts: row.ts, manualAway: boolToInt(row.manualAway) });
+}
+
+export function getCurrentOccupancy() {
+  return getDb().prepare(`SELECT * FROM current_occupancy WHERE id = 1`).get();
+}
+
 let upsertZoneConfigStmt: Database.Statement | null = null;
 export function upsertZoneConfigs(rows: ZoneConfigRow[], updatedAt: number): void {
   const db = getDb();
@@ -352,26 +414,6 @@ export function upsertEquipmentFeatures(rows: EquipmentFeatureRow[], lastSeenTs:
   tx(rows);
 }
 
-let upsertDiagnosticStmt: Database.Statement | null = null;
-export function upsertEquipmentDiagnostics(rows: EquipmentDiagnosticRow[], lastSeenTs: number): void {
-  const db = getDb();
-  upsertDiagnosticStmt ??= db.prepare(`
-    INSERT INTO equipment_diagnostics (equipment_id, diagnostic_name, value, unit, last_seen_ts)
-    VALUES (@equipmentId, @diagnosticName, @value, @unit, @lastSeenTs)
-    ON CONFLICT (equipment_id, diagnostic_name) DO UPDATE SET
-      value = excluded.value,
-      unit = excluded.unit,
-      last_seen_ts = excluded.last_seen_ts
-  `);
-  const stmt = upsertDiagnosticStmt;
-  const tx = db.transaction((items: EquipmentDiagnosticRow[]) => {
-    for (const r of items) {
-      stmt.run({ ...r, lastSeenTs });
-    }
-  });
-  tx(rows);
-}
-
 function boolToInt(v: boolean | null): number | null {
   if (v === null) return null;
   return v ? 1 : 0;
@@ -408,13 +450,24 @@ export function getActiveAlerts() {
     .all();
 }
 
+// Info-priority notices the device never actually clears (e.g. "Device Control
+// Board Replaced" from a one-time historical event) would otherwise sit on the
+// dashboard's active-info card forever - only surface ones that are actually
+// recent. getAlertHistory below is unaffected, so old ones stay browsable there.
+const INFO_ALERT_RECENCY_SECONDS = 48 * 60 * 60;
+
 // Active info-priority notices, surfaced separately (a Dashboard card) since
 // they're not actionable enough to count as an "active alert" but shouldn't
 // be invisible either.
 export function getActiveInfoAlerts() {
+  const cutoff = Math.floor(Date.now() / 1000) - INFO_ALERT_RECENCY_SECONDS;
   return getDb()
-    .prepare(`SELECT * FROM alerts WHERE is_still_active = 1 AND priority = 'info' ORDER BY timestamp_last DESC`)
-    .all();
+    .prepare(
+      `SELECT * FROM alerts
+       WHERE is_still_active = 1 AND priority = 'info' AND CAST(timestamp_first AS INTEGER) >= ?
+       ORDER BY timestamp_last DESC`
+    )
+    .all(cutoff);
 }
 
 // Info-priority alerts are informational notices, not actionable - they never
@@ -465,12 +518,6 @@ export function closeStaleAlerts(identities: AlertIdentity[], updatedAt: number)
 export function getEquipmentSnapshot() {
   return getDb()
     .prepare(`SELECT * FROM equipment_features ORDER BY equipment_id, feature_name`)
-    .all();
-}
-
-export function getEquipmentDiagnosticsSnapshot() {
-  return getDb()
-    .prepare(`SELECT * FROM equipment_diagnostics ORDER BY equipment_id, diagnostic_name`)
     .all();
 }
 

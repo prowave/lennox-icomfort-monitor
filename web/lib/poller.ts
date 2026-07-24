@@ -9,7 +9,8 @@ import {
   parseSystem,
   parseAlerts,
   parseEquipmentFeatures,
-  parseEquipmentDiagnostics,
+  parseNetworkInterfaces,
+  parseOccupancy,
   parseWeather,
 } from "./parse";
 import {
@@ -17,7 +18,8 @@ import {
   insertSystemReading,
   upsertAlerts,
   upsertEquipmentFeatures,
-  upsertEquipmentDiagnostics,
+  upsertNetworkInterfaces,
+  upsertOccupancy,
   upsertWeather,
   upsertZoneConfigs,
   getActiveAlertIdentities,
@@ -44,31 +46,6 @@ globalForStatus.lennoxPollerStatus = status;
 
 export function getPollerStatus(): PollerStatus {
   return { ...status };
-}
-
-// Stashed on globalThis for the same reason as `status` above - an API route
-// requesting an on-demand refresh runs in a separate module instance from the
-// poller loop that actually created this client.
-const globalForClient = globalThis as unknown as { lennoxPollerClient?: LennoxClient };
-
-/**
- * Re-issues a RequestData for just /equipments on the poller's already-open
- * session. This is exactly what a fresh reconnect does for the whole tree
- * (which is how the "waiting..." diagnostics were observed to eventually
- * fill in) - scoped down to only the equipment subtree so it doesn't also
- * force a full alerts/zones re-dump. It asks the S30 to push whatever it
- * currently has; if the outdoor unit hasn't reported a live value to the LCC
- * recently, the pushed value may still legitimately be "waiting...".
- */
-export async function requestDiagnosticsRefresh(): Promise<{ ok: boolean; error?: string }> {
-  const client = globalForClient.lennoxPollerClient;
-  if (!client) return { ok: false, error: "Poller is not connected yet" };
-  try {
-    await client.subscribe("/equipments");
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
 }
 
 function appendToLog(msg: LennoxMessage): void {
@@ -142,17 +119,26 @@ function handleMessage(msg: LennoxMessage): void {
       upsertEquipmentFeatures(rows, ts);
       publish({ type: "equipment", ts });
     }
-    const diagnosticRows = parseEquipmentDiagnostics(data);
-    if (diagnosticRows.length) {
-      upsertEquipmentDiagnostics(diagnosticRows, ts);
-      publish({ type: "equipment", ts });
-    }
   }
   if (data.weather) {
     const row = parseWeather(data, ts);
     if (row) {
       upsertWeather(row);
       publish({ type: "weather", ts });
+    }
+  }
+  if (data.interfaces) {
+    const rows = parseNetworkInterfaces(data, ts);
+    if (rows.length) {
+      upsertNetworkInterfaces(rows);
+      publish({ type: "network", ts });
+    }
+  }
+  if (data.occupancy) {
+    const row = parseOccupancy(data, ts);
+    if (row) {
+      upsertOccupancy(row);
+      publish({ type: "occupancy", ts });
     }
   }
 }
@@ -218,7 +204,6 @@ export function startPoller(): void {
   const jsonPath = process.env.LENNOX_JSON_PATH ?? DEFAULT_JSON_PATH;
 
   const client = new LennoxClient(ip, appId);
-  globalForClient.lennoxPollerClient = client;
 
   (async () => {
     try {

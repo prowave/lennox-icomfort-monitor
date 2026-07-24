@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   getEquipmentSnapshot,
-  getEquipmentDiagnosticsSnapshot,
+  getNetworkSnapshot,
+  getCurrentOccupancy,
   getLatestSystemReading,
   getLatestZoneSnapshot,
   getAllZoneConfigs,
@@ -17,7 +18,8 @@ export async function GET() {
     zoneConfig: getAllZoneConfigs(),
     system: getLatestSystemReading(),
     equipment: getEquipmentSnapshot(),
-    diagnostics: getEquipmentDiagnosticsSnapshot(),
+    network: getNetworkSnapshot(),
+    occupancy: getCurrentOccupancy(),
     poller: getPollerStatus(),
   });
 }

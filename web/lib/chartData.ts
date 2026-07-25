@@ -37,6 +37,31 @@ export function buildTemperatureRequests(zoneIds: number[]): SeriesRequest[] {
   ];
 }
 
+/**
+ * A gap between two consecutive readings of the same series longer than this
+ * means the series actually stopped reporting (normal cadence is well under a
+ * minute), as opposed to just being a moment when only another series updated.
+ */
+export const NO_DATA_GAP_MS = 10 * 60 * 1000;
+
+/** Stretches of a chart's merged timeline wider than a normal reporting cadence - shaded as "no data" by chart components instead of being bridged by a line/area. */
+export function findDataGaps(data: ChartPoint[], xDomain?: [number, number]): [number, number][] {
+  if (data.length === 0) return [];
+  const gaps: [number, number][] = [];
+  for (let i = 1; i < data.length; i++) {
+    const prev = data[i - 1].ts;
+    const curr = data[i].ts;
+    if (curr - prev > NO_DATA_GAP_MS) gaps.push([prev, curr]);
+  }
+  if (xDomain) {
+    const [from, to] = xDomain;
+    if (data[0].ts - from > NO_DATA_GAP_MS) gaps.unshift([from, data[0].ts]);
+    const lastTs = data[data.length - 1].ts;
+    if (to - lastTs > NO_DATA_GAP_MS) gaps.push([lastTs, to]);
+  }
+  return gaps;
+}
+
 export async function fetchSeries(requests: SeriesRequest[], from: number, to: number): Promise<ChartPoint[]> {
   const results = await Promise.all(
     requests.map(async (r) => {
@@ -44,17 +69,31 @@ export async function fetchSeries(requests: SeriesRequest[], from: number, to: n
       if (r.zoneId !== undefined) params.set("zoneId", String(r.zoneId));
       const res = await fetch(`/api/history?${params.toString()}`);
       const json: { points?: HistoryPoint[] } = await res.json();
-      return { key: r.key, points: json.points ?? [] };
+      return { key: r.key, points: (json.points ?? []).filter((p) => p.value !== null) };
     })
   );
 
   const byTs = new Map<number, ChartPoint>();
+  const pointAt = (ts: number) => {
+    let point = byTs.get(ts);
+    if (!point) {
+      point = { ts };
+      byTs.set(ts, point);
+    }
+    return point;
+  };
+
   for (const { key, points } of results) {
     for (const p of points) {
-      if (p.value === null) continue;
-      const existing = byTs.get(p.ts) ?? { ts: p.ts };
-      existing[key] = p.value;
-      byTs.set(p.ts, existing);
+      pointAt(p.ts)[key] = p.value;
+    }
+    // Mark real outages with an explicit null right after the last reading, so
+    // the line breaks there instead of Recharts drawing a straight connection
+    // across however many hours the series was actually silent.
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].ts - points[i - 1].ts > NO_DATA_GAP_MS) {
+        pointAt(points[i - 1].ts + 1)[key] = null;
+      }
     }
   }
   const sorted = Array.from(byTs.values()).sort((a, b) => a.ts - b.ts);
@@ -65,12 +104,16 @@ export async function fetchSeries(requests: SeriesRequest[], from: number, to: n
   // hovering would show just whichever series happened to update at that
   // instant. Carry forward each series' last known value across the merged
   // timeline so every point (once a series has reported at least once) shows
-  // all series together.
+  // all series together - but a null (a real outage, marked above) clears it
+  // instead of being carried forward, so the gap isn't immediately papered
+  // back over with a stale value.
   const lastKnown: Record<string, number> = {};
   for (const point of sorted) {
     for (const r of requests) {
       if (point[r.key] === undefined) {
         if (r.key in lastKnown) point[r.key] = lastKnown[r.key];
+      } else if (point[r.key] === null) {
+        delete lastKnown[r.key];
       } else {
         lastKnown[r.key] = point[r.key] as number;
       }
